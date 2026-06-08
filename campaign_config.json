@@ -1,0 +1,84 @@
+{
+  "builds": [
+    {
+      "name": "reference",
+      "binary": "~/projects/gromacs/build/bin/gmx"
+    },
+    {
+      "name": "candidate",
+      "binary": "~/projects/gromacs-fixed-precision/build/bin/gmx"
+    }
+  ],
+  "campaign": {
+    "output": "water_fixed_precision_campaign",
+    "base_box_nm": [5.0, 5.0, 5.0],
+    "sweep_axis": "x",
+    "axis_lengths_nm": [5.0, 10.0, 50.0, 100.0]
+  },
+  "mdp": {
+    "topology": {
+      "force_field": "oplsaa.ff/forcefield.itp",
+      "water_model": "oplsaa.ff/spc.itp",
+      "system_name": "Pure water fixed-precision coordinate test"
+    },
+    "energy_minimization": {
+      "integrator": "steep",
+      "nsteps": 5000,
+      "emtol": 100.0,
+      "emstep": 0.01,
+      "cutoff-scheme": "Verlet",
+      "nstlist": 20,
+      "coulombtype": "Cut-off",
+      "coulomb-modifier": "Potential-shift",
+      "rlist": 1.0,
+      "rvdw": 1.0,
+      "rcoulomb": 1.0,
+      "constraints": "h-bonds",
+      "constraint-algorithm": "lincs",
+      "pbc": "xyz"
+    },
+    "production": {
+      "integrator": "md",
+      "nsteps": 50000,
+      "dt": 0.002,
+      "nstfout": 0,
+      "nstxout": 0,
+      "nstvout": 0,
+      "nstxout-compressed": 0,
+      "nstcalcenergy": 100,
+      "nstcomm": 100,
+      "nstenergy": 100,
+      "nstlog": 100,
+      "constraints": "h-bonds",
+      "constraint-algorithm": "lincs",
+      "cutoff-scheme": "Verlet",
+      "nstlist": 20,
+      "coulombtype": "Cut-off",
+      "coulomb-modifier": "Potential-shift",
+      "rlist": 1.0,
+      "rvdw": 1.0,
+      "rcoulomb": 1.0,
+      "tcoupl": "no",
+      "pcoupl": "no",
+      "pbc": "xyz"
+    }
+  },
+  "execution": {
+    "gmxflags": "",
+    "solvate_flags": "-cs spc216.gro",
+    "minimization_mdrun_flags": "-nb cpu -v",
+    "production_mdrun_flags": "-nb gpu -bonded gpu -update gpu -v",
+    "energy_term": "Total-Energy"
+  },
+  "slurm": {
+    "job_name": "gmx-water-fixed",
+    "nodes": 1,
+    "ntasks": 1,
+    "cpus_per_task": 8,
+    "gres": "gpu:1",
+    "time": "02:00:00",
+    "partition": "",
+    "output": "slurm-%A_%a.out",
+    "error": "slurm-%A_%a.err"
+  }
+}
