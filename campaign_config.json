@@ -2,11 +2,11 @@
   "builds": [
     {
       "name": "reference",
-      "binary": "~/projects/gromacs/build/bin/gmx"
+      "binary": "~/projects/gromacs_ref/build/bin/gmx"
     },
     {
       "name": "candidate",
-      "binary": "~/projects/gromacs-fixed-precision/build/bin/gmx"
+      "binary": "~/projects/gromacs/build/bin/gmx"
     }
   ],
   "campaign": {
