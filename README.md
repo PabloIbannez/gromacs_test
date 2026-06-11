@@ -1,9 +1,10 @@
 # GROMACS Water Fixed-Precision Test Campaigns
 
 This repository generates pure-water GROMACS test campaigns for comparing a
-reference binary against a candidate binary. The default campaign sweeps the
-`x` box length with `5x5x5`, `10x5x5`, `50x5x5`, and `100x5x5` nm water boxes,
-creating one folder per build and box size.
+reference binary against a candidate binary and a double-precision reference
+binary. The default campaign sweeps the `x` box length with `5x3x3`,
+`10x3x3`, `50x3x3`, `100x3x3`, and `150x3x3` nm water boxes, creating one
+folder per build and box size.
 
 All campaign, simulation, execution, and SLURM parameters live in
 `campaign_config.json`.
@@ -16,11 +17,27 @@ Edit the GROMACS binary paths in `campaign_config.json`:
 "builds": [
   {
     "name": "reference",
-    "binary": "/path/to/reference/gmx"
+    "binary": "/path/to/reference/gmx",
+    "execution": {
+      "equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+      "production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v"
+    }
   },
   {
     "name": "candidate",
-    "binary": "/path/to/candidate/gmx"
+    "binary": "/path/to/candidate/gmx",
+    "execution": {
+      "equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+      "production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v"
+    }
+  },
+  {
+    "name": "ref_dbl",
+    "binary": "/path/to/double/reference/gmx_d",
+    "execution": {
+      "equilibration_mdrun_flags": "-nb cpu -bonded cpu -update cpu -v",
+      "production_mdrun_flags": "-nb cpu -bonded cpu -update cpu -v"
+    }
   }
 ]
 ```
@@ -35,6 +52,7 @@ The default output directory is `water_fixed_precision_campaign`. It contains:
 
 - `reference/water_*`: runs using the reference binary.
 - `candidate/water_*`: runs using the candidate binary.
+- `ref_dbl/water_*`: runs using the double-precision reference binary.
 - `cases.txt`: the generated case list.
 - `submit_slurm.sh`: a SLURM array job that launches every case.
 
@@ -52,33 +70,49 @@ The box sweep is configured under `campaign`:
 ```json
 "campaign": {
   "output": "water_fixed_precision_campaign",
-  "base_box_nm": [5.0, 5.0, 5.0],
+  "base_box_nm": [3.0, 3.0, 3.0],
   "sweep_axis": "x",
-  "axis_lengths_nm": [5.0, 10.0, 50.0, 100.0]
+  "axis_lengths_nm": [5.0, 10.0, 50.0, 100.0, 150.0]
 }
 ```
 
-The generated `em.mdp` and `md.mdp` files are written from the `mdp` section.
-The default production run is NVE and writes total energy every 100 steps.
+The generated `em.mdp`, `nvt.mdp`, and `md.mdp` files are written from the
+`mdp` section. Each case minimizes, equilibrates with NVT, then runs production
+and writes total energy every 100 steps.
 
-Electrostatics use the Verlet neighbor list with a cutoff instead of PME:
+Electrostatics use PME with the Verlet neighbor list:
 
 ```json
-"coulombtype": "Cut-off",
-"coulomb-modifier": "Potential-shift",
+"coulombtype": "PME",
+"fourierspacing": 0.12,
+"pme-order": 4,
 "rlist": 1.0,
 "rcoulomb": 1.0
 ```
 
 ## GPU Path
 
-The production `mdrun` flags are configured under `execution`:
+The default `mdrun` flags are configured under `execution` and can be overridden
+per build:
 
 ```json
-"production_mdrun_flags": "-nb gpu -bonded gpu -update gpu -v"
+"equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+"production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v"
 ```
 
-This keeps nonbonded, bonded, and update work on the GPU while avoiding PME.
+This keeps nonbonded and update work on the GPU for the single-precision builds,
+while the double-precision reference defaults to CPU execution.
+
+## Energy Plots
+
+After cases complete, plot available production total-energy traces:
+
+```bash
+python3 analyze_energy.py water_fixed_precision_campaign
+```
+
+Use `--extract-missing` to extract `total_energy.xvg` from completed cases that
+only have `md.edr`.
 
 ## SLURM
 

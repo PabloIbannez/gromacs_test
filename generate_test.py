@@ -15,6 +15,7 @@ from typing import Any
 class GmxBuild:
     name: str
     binary: str
+    execution: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -107,6 +108,7 @@ def write_common_inputs(folder: Path, mdp_config: dict[str, Any]) -> None:
     )
 
     write_file(folder / "em.mdp", make_mdp(require_mapping(mdp_config, "energy_minimization")))
+    write_file(folder / "nvt.mdp", make_mdp(require_mapping(mdp_config, "equilibration")))
     write_file(folder / "md.mdp", make_mdp(require_mapping(mdp_config, "production")))
 
 
@@ -115,10 +117,12 @@ def make_case_makefile(
     build: GmxBuild,
     execution: dict[str, Any],
 ) -> str:
+    execution = {**execution, **build.execution}
     gmxflags = execution.get("gmxflags", "")
     solvate_flags = execution.get("solvate_flags", "-cs spc216.gro")
     minimization_mdrun_flags = execution.get("minimization_mdrun_flags", "-nb cpu -v")
     production_mdrun_flags = execution.get("production_mdrun_flags", "-nb gpu -bonded gpu -update gpu -v")
+    equilibration_mdrun_flags = execution.get("equilibration_mdrun_flags", production_mdrun_flags)
     energy_term = execution.get("energy_term", "Total-Energy")
 
     return f"""
@@ -126,6 +130,7 @@ def make_case_makefile(
     GMXFLAGS ?= {gmxflags}
     SOLVATE_FLAGS ?= {solvate_flags}
     MINIMIZATION_MDRUN_FLAGS ?= {minimization_mdrun_flags}
+    EQUILIBRATION_MDRUN_FLAGS ?= {equilibration_mdrun_flags}
     PRODUCTION_MDRUN_FLAGS ?= {production_mdrun_flags}
     ENERGY_TERM ?= {energy_term}
 
@@ -142,14 +147,20 @@ def make_case_makefile(
     EM_TPR = $(EM_DEFFNM).tpr
     EM_CONF = $(EM_DEFFNM).gro
 
+    NVT_MDP = nvt.mdp
+    NVT_DEFFNM = nvt
+    NVT_TPR = $(NVT_DEFFNM).tpr
+    NVT_CONF = $(NVT_DEFFNM).gro
+
     MDP = md.mdp
     DEFFNM = md
     TPR = topol.tpr
+    PBC_TRAJ = $(DEFFNM)_pbc.xtc
     ENERGY_XVG = total_energy.xvg
     ENERGY_TXT = total_energy.dat
     DRIFT_TXT = energy_drift.txt
 
-    .PHONY: all info solvate minimize prepare run energy clean distclean
+    .PHONY: all info solvate minimize equilibrate prepare run pbc energy clean distclean
 
     all: energy
 
@@ -177,10 +188,21 @@ def make_case_makefile(
     \t\t-deffnm $(EM_DEFFNM) \\
     \t\t$(MINIMIZATION_MDRUN_FLAGS)
 
-    prepare: minimize
+    equilibrate: minimize
+    \t$(GMX) grompp $(GMXFLAGS) \\
+    \t\t-f $(NVT_MDP) \\
+    \t\t-c $(EM_CONF) \\
+    \t\t-p $(TOP) \\
+    \t\t-o $(NVT_TPR)
+    \t$(GMX) mdrun $(GMXFLAGS) \\
+    \t\t-s $(NVT_TPR) \\
+    \t\t-deffnm $(NVT_DEFFNM) \\
+    \t\t$(EQUILIBRATION_MDRUN_FLAGS)
+
+    prepare: equilibrate
     \t$(GMX) grompp $(GMXFLAGS) \\
     \t\t-f $(MDP) \\
-    \t\t-c $(EM_CONF) \\
+    \t\t-c $(NVT_CONF) \\
     \t\t-p $(TOP) \\
     \t\t-o $(TPR)
 
@@ -190,7 +212,16 @@ def make_case_makefile(
     \t\t-deffnm $(DEFFNM) \\
     \t\t$(PRODUCTION_MDRUN_FLAGS)
 
-    energy: run
+    pbc: run
+    \tprintf "System\\nSystem\\n" | $(GMX) trjconv $(GMXFLAGS) \\
+    \t\t-s $(TPR) \\
+    \t\t-f $(DEFFNM).trr \\
+    \t\t-o $(PBC_TRAJ) \\
+    \t\t-pbc mol \\
+    \t\t-ur compact \\
+    \t\t-center
+
+    energy: pbc
     \tprintf "$(ENERGY_TERM)\\n0\\n" | $(GMX) energy $(GMXFLAGS) \\
     \t\t-f $(DEFFNM).edr \\
     \t\t-o $(ENERGY_XVG) \\
@@ -201,8 +232,9 @@ def make_case_makefile(
     clean:
     \trm -f $(CONF) $(TOP)
     \trm -f $(EM_TPR) $(EM_CONF) em.log em.edr em.trr em.xtc em.cpt em_prev.cpt
+    \trm -f $(NVT_TPR) $(NVT_CONF) nvt.log nvt.edr nvt.trr nvt.xtc nvt.cpt nvt_prev.cpt
     \trm -f $(TPR)
-    \trm -f md.log md.edr md.trr md.xtc md.gro md.cpt md_prev.cpt
+    \trm -f md.log md.edr md.trr md.xtc md.gro md.cpt md_prev.cpt $(PBC_TRAJ)
     \trm -f $(ENERGY_XVG) $(ENERGY_TXT) $(DRIFT_TXT)
 
     distclean: clean
@@ -284,7 +316,10 @@ def parse_builds(config: dict[str, Any]) -> list[GmxBuild]:
     for entry in raw_builds:
         if not isinstance(entry, dict):
             raise ValueError("Each build entry must be an object")
-        builds.append(GmxBuild(str(entry["name"]), str(entry["binary"])))
+        execution = entry.get("execution", {})
+        if not isinstance(execution, dict):
+            raise ValueError("Build entry 'execution' must be an object")
+        builds.append(GmxBuild(str(entry["name"]), str(entry["binary"]), execution))
     if not builds:
         raise ValueError("At least one build must be configured")
     return builds
