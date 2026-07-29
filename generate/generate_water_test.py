@@ -253,11 +253,21 @@ def write_case(
     write_common_inputs(folder, mdp_config)
     write_file(folder / "Makefile", make_case_makefile(case, build, execution))
     write_file(
+        folder / "run_local.sh",
+        """
+        #!/usr/bin/env bash
+        set -euo pipefail
+        cd "$(dirname "$0")"
+        make all
+        """,
+        executable=True,
+    )
+    write_file(
         folder / "run_case.sh",
         """
         #!/usr/bin/env bash
         set -euo pipefail
-        make -C "$(dirname "$0")" all
+        exec "$(dirname "$0")/run_local.sh"
         """,
         executable=True,
     )
@@ -327,12 +337,17 @@ def parse_builds(config: dict[str, Any]) -> list[GmxBuild]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate a GROMACS pure-water GPU test campaign from a JSON configuration."
+        description="Generate a GROMACS pure-water test campaign from split JSON configuration files."
     )
     parser.add_argument(
-        "--config",
-        default="campaign_config.json",
-        help="Path to the campaign JSON configuration. Default: campaign_config.json",
+        "--general-config",
+        default="config/general_config.json",
+        help="Path to the general JSON configuration. Default: config/general_config.json",
+    )
+    parser.add_argument(
+        "--system-config",
+        default="config/water_system_config.json",
+        help="Path to the water system JSON configuration. Default: config/water_system_config.json",
     )
     parser.add_argument(
         "--run",
@@ -346,12 +361,14 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    config_path = Path(args.config)
-    config = load_config(config_path)
-    campaign = require_mapping(config, "campaign")
-    mdp_config = require_mapping(config, "mdp")
-    execution = require_mapping(config, "execution")
-    slurm_config = require_mapping(config, "slurm")
+    general_config_path = Path(args.general_config)
+    system_config_path = Path(args.system_config)
+    general_config = load_config(general_config_path)
+    system_config = load_config(system_config_path)
+    campaign = require_mapping(system_config, "campaign")
+    mdp_config = require_mapping(system_config, "mdp")
+    execution = require_mapping(general_config, "execution")
+    slurm_config = require_mapping(general_config, "slurm")
 
     output = Path(campaign.get("output", "water_fixed_precision_campaign")).resolve()
     cases = make_cases(
@@ -359,7 +376,7 @@ def main() -> None:
         str(campaign.get("sweep_axis", "x")),
         require_list(campaign, "axis_lengths_nm"),
     )
-    builds = parse_builds(config)
+    builds = parse_builds(general_config)
 
     case_dirs: list[Path] = []
     for case in cases:
@@ -371,11 +388,13 @@ def main() -> None:
     write_manifest(output, case_dirs)
     write_slurm_script(output, case_dirs, slurm_config)
 
-    print(f"Loaded configuration: {config_path}")
+    print(f"Loaded general configuration: {general_config_path}")
+    print(f"Loaded system configuration: {system_config_path}")
     print(f"Created campaign: {output}")
     print(f"Generated {len(cases)} box sizes x {len(builds)} builds = {len(case_dirs)} case folders")
     print()
     print("Run locally:")
+    print(f"  {case_dirs[0] / 'run_local.sh'}")
     print(f"  make -C {case_dirs[0]} all")
     print()
     print("Run on SLURM:")

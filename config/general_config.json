@@ -1,0 +1,47 @@
+{
+  "builds": [
+    {
+      "name": "reference",
+      "binary": "~/projects/gromacs_ref/build/bin/gmx",
+      "execution": {
+        "equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+        "production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v"
+      }
+    },
+    {
+      "name": "candidate",
+      "binary": "~/projects/gromacs/build/bin/gmx",
+      "execution": {
+        "equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+        "production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v"
+      }
+    },
+    {
+      "name": "reference_double",
+      "binary": "~/projects/gromacs_dbl_ref/build/bin/gmx_d",
+      "execution": {
+        "equilibration_mdrun_flags": "-nb cpu -bonded cpu -update cpu -v",
+        "production_mdrun_flags": "-nb cpu -bonded cpu -update cpu -v"
+      }
+    }
+  ],
+  "execution": {
+    "gmxflags": "",
+    "solvate_flags": "-cs spc216.gro",
+    "minimization_mdrun_flags": "-nb cpu -v",
+    "equilibration_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+    "production_mdrun_flags": "-nb gpu -bonded cpu -update gpu -v",
+    "energy_term": "Total-Energy"
+  },
+  "slurm": {
+    "job_name": "gmx-water-fixed",
+    "nodes": 1,
+    "ntasks": 1,
+    "cpus_per_task": 8,
+    "gres": "gpu:1",
+    "time": "02:00:00",
+    "partition": "",
+    "output": "slurm-%A_%a.out",
+    "error": "slurm-%A_%a.err"
+  }
+}

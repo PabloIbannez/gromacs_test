@@ -1,0 +1,7 @@
+#include "oplsaa.ff/forcefield.itp"
+#include "oplsaa.ff/spc.itp"
+
+[ system ]
+Pure water fixed-precision coordinate test
+
+[ molecules ]

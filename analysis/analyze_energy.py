@@ -218,7 +218,7 @@ def safe_plot_name(relative_name: str) -> str:
 
 
 def build_sort_key(trace: EnergyTrace) -> tuple[int, str]:
-    order = {"reference": 0, "candidate": 1, "ref_dbl": 2}
+    order = {"reference": 0, "candidate": 1, "reference_double": 2, "ref_dbl": 2}
     return order.get(trace.build_name, 100), trace.build_name
 
 

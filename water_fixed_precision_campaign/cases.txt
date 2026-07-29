@@ -1,0 +1,17 @@
+# Generated GROMACS water test cases
+
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference/water_5_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/candidate/water_5_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference_double/water_5_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference/water_10_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/candidate/water_10_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference_double/water_10_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference/water_50_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/candidate/water_50_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference_double/water_50_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference/water_100_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/candidate/water_100_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference_double/water_100_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference/water_150_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/candidate/water_150_3_3
+/home/pablo/projects/gromacs_test/water_fixed_precision_campaign/reference_double/water_150_3_3
