@@ -1,15 +1,15 @@
-# GROMACS Water Fixed-Precision Test Campaigns
+# GROMACS Fixed-Precision Test Campaigns
 
-This repository generates pure-water GROMACS test campaigns for comparing a
-reference binary against a candidate binary and a double-precision reference
-binary. The default campaign sweeps the `x` box length with `5x3x3`,
-`10x3x3`, `50x3x3`, `100x3x3`, and `150x3x3` nm water boxes, creating one
-folder per build and box size.
+This repository generates GROMACS test campaigns for comparing a reference
+binary against a candidate binary and a double-precision reference binary. It
+currently supports pure-water systems and protein-in-water systems with repeated
+copies of ubiquitin.
 
 General execution and build parameters live in `config/general_config.json`.
-Water system and MDP parameters live in `config/water_system_config.json`.
+System-specific parameters live in `config/water_system_config.json` and
+`config/protein_water_system_config.json`.
 
-## Generate a Campaign
+## Shared Build Configuration
 
 Edit the GROMACS binary paths in `config/general_config.json`:
 
@@ -42,7 +42,13 @@ Edit the GROMACS binary paths in `config/general_config.json`:
 ]
 ```
 
-Then generate the campaign:
+## Generate a Water Campaign
+
+The default water campaign sweeps the `x` box length with `5x3x3`, `10x3x3`,
+`50x3x3`, `100x3x3`, and `150x3x3` nm water boxes, creating one folder per
+build and box size.
+
+Generate it with:
 
 ```bash
 python3 generate/generate_water_test.py \
@@ -153,4 +159,68 @@ Submit all generated cases with:
 
 ```bash
 sbatch water_fixed_precision_campaign/submit_slurm.sh
+```
+
+## Generate a Protein-Water Campaign
+
+The protein-water campaign uses ubiquitin (`1UBQ`) as a compact structured
+protein. The input PDB lives at `data/1ubq.pdb`; regenerate it from RCSB with:
+
+```bash
+python3 data/fetch_1ubq.py
+```
+
+Configure the number of horizontal copies in
+`config/protein_water_system_config.json`:
+
+```json
+"copy_counts": [1, 2, 4],
+"copy_axis": "x",
+"copy_spacing_nm": 4.0
+```
+
+Generate all configured copy counts:
+
+```bash
+python3 generate/generate_protein_water_test.py \
+  --general-config config/general_config.json \
+  --system-config config/protein_water_system_config.json
+```
+
+Or generate one `N` explicitly:
+
+```bash
+python3 generate/generate_protein_water_test.py --copy-count 4
+```
+
+The default output directory is `protein_water_fixed_precision_campaign`. It
+contains case folders such as:
+
+- `reference/protein_1ubq_N4`
+- `candidate/protein_1ubq_N4`
+- `reference_double/protein_1ubq_N4`
+
+Each protein case runs `pdb2gmx`, replicates the processed protein `N` times in
+the configured horizontal axis, solvates, minimizes, equilibrates with NVT, runs
+production, writes `md.trr`, postprocesses `md_pbc.xtc`, and extracts total
+energy.
+
+Run one generated protein case from the repository root:
+
+```bash
+make -C protein_water_fixed_precision_campaign/reference/protein_1ubq_N4 all
+```
+
+View a completed protein trajectory with VMD:
+
+```bash
+vmd protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/md.gro \
+    protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/md_pbc.xtc
+```
+
+For a partial run that has `md.trr` but not `md.gro`, use:
+
+```bash
+vmd protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/topol.tpr \
+    protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/md.trr
 ```

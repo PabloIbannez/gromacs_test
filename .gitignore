@@ -1,2 +1,5 @@
 # Generated campaign contents and simulation outputs.
 *_campaign/**
+
+# Python bytecode caches.
+__pycache__/
