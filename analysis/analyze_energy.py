@@ -66,6 +66,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Extract total_energy.xvg from md.edr for completed cases where it is missing.",
     )
+    parser.add_argument(
+        "--extract-partial",
+        action="store_true",
+        help="Extract total_energy.xvg from md.edr even when production mdrun has not finished.",
+    )
     return parser.parse_args()
 
 
@@ -88,9 +93,6 @@ def discover_case_dirs(campaign_dir: Path) -> list[Path]:
 
 
 def production_finished(case_dir: Path) -> bool:
-    if (case_dir / "total_energy.xvg").exists():
-        return True
-
     md_log = case_dir / "md.log"
     if not md_log.exists() or not (case_dir / "md.edr").exists():
         return False
@@ -100,6 +102,12 @@ def production_finished(case_dir: Path) -> bool:
     except OSError:
         return False
     return "Finished mdrun" in log_text and "Segmentation fault" not in log_text
+
+
+def energy_source_available(case_dir: Path, extract_partial: bool) -> bool:
+    if (case_dir / "total_energy.xvg").exists() or production_finished(case_dir):
+        return True
+    return extract_partial and (case_dir / "md.edr").exists()
 
 
 def make_relative_name(campaign_dir: Path, case_dir: Path) -> str:
@@ -232,6 +240,30 @@ def drift_per_atom(trace: EnergyTrace) -> list[float]:
     return [value - initial for value in values]
 
 
+def linear_fit_intercept(xs: list[float], ys: list[float]) -> float:
+    if len(xs) != len(ys):
+        raise ValueError("Cannot fit series with different x/y lengths")
+    if not xs:
+        raise ValueError("Cannot fit an empty series")
+    if len(xs) == 1:
+        return ys[0]
+
+    mean_x = sum(xs) / len(xs)
+    mean_y = sum(ys) / len(ys)
+    denominator = sum((x - mean_x) ** 2 for x in xs)
+    if denominator == 0:
+        return mean_y
+
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / denominator
+    return mean_y - slope * mean_x
+
+
+def fitted_intercept_aligned_energy_per_atom(trace: EnergyTrace) -> list[float]:
+    values = energy_per_atom(trace)
+    intercept = linear_fit_intercept(trace.times, values)
+    return [value - intercept for value in values]
+
+
 def plot_trace(trace: EnergyTrace, output_dir: Path) -> Path:
     output = output_dir / f"{safe_plot_name(trace.relative_name)}_total_energy.png"
     fig, axis = plt.subplots(figsize=(9, 5))
@@ -253,9 +285,14 @@ def plot_combined(traces: list[EnergyTrace], output_dir: Path) -> Path | None:
     output = output_dir / "all_completed_total_energy.png"
     fig, axis = plt.subplots(figsize=(10, 6))
     for trace in traces:
-        axis.plot(trace.times, energy_per_atom(trace), linewidth=1.2, label=trace.relative_name)
+        axis.plot(
+            trace.times,
+            fitted_intercept_aligned_energy_per_atom(trace),
+            linewidth=1.2,
+            label=trace.relative_name,
+        )
     axis.set_xlabel("Production time (ps)")
-    axis.set_ylabel("Total energy per atom (kJ/mol/atom)")
+    axis.set_ylabel("Total energy per atom minus fitted intercept (kJ/mol/atom)")
     axis.grid(True, alpha=0.3)
     axis.legend(fontsize="small")
     fig.tight_layout()
@@ -271,10 +308,15 @@ def plot_box_group(box_name: str, traces: list[EnergyTrace], output_dir: Path) -
     for trace in ordered:
         total_drift_per_atom = (trace.energies[-1] - trace.energies[0]) / trace.natoms
         label = f"{trace.build_name} ({total_drift_per_atom:.4g} kJ/mol/atom drift)"
-        axis.plot(trace.times, drift_per_atom(trace), linewidth=1.4, label=label)
+        axis.plot(
+            trace.times,
+            fitted_intercept_aligned_energy_per_atom(trace),
+            linewidth=1.4,
+            label=label,
+        )
     axis.set_title(box_name)
     axis.set_xlabel("Production time (ps)")
-    axis.set_ylabel("Energy drift per atom from t=0 (kJ/mol/atom)")
+    axis.set_ylabel("Energy per atom minus fitted intercept (kJ/mol/atom)")
     axis.grid(True, alpha=0.3)
     axis.legend(fontsize="small")
     fig.tight_layout()
@@ -353,17 +395,18 @@ def main() -> None:
 
     case_dirs = discover_case_dirs(campaign_dir)
     completed = [case_dir for case_dir in case_dirs if production_finished(case_dir)]
+    candidates = [case_dir for case_dir in case_dirs if energy_source_available(case_dir, args.extract_partial)]
     traces = []
     skipped = []
     plot_paths = {}
 
-    for case_dir in completed:
+    for case_dir in candidates:
         trace = load_trace(
             campaign_dir=campaign_dir,
             case_dir=case_dir,
             energy_term=args.energy_term,
             explicit_gmx=args.gmx,
-            extract_missing=args.extract_missing,
+            extract_missing=args.extract_missing or args.extract_partial,
         )
         if trace is None:
             skipped.append(make_relative_name(campaign_dir, case_dir))
@@ -374,13 +417,15 @@ def main() -> None:
     if not traces:
         print(f"Scanned cases: {len(case_dirs)}")
         print(f"Completed production cases: {len(completed)}")
+        print(f"Cases with energy source: {len(candidates)}")
         print("Plotted cases: 0")
         print(f"Output directory: {output_dir}")
         if skipped:
-            print("Completed cases skipped because total_energy.xvg is missing:")
+            print("Cases skipped because total_energy.xvg is missing:")
             for name in skipped:
                 print(f"  {name}")
             print("Rerun with --extract-missing to extract total_energy.xvg from md.edr.")
+            print("Use --extract-partial to also include unfinished cases with md.edr.")
         return
 
     plot_combined(traces, output_dir)
@@ -389,14 +434,16 @@ def main() -> None:
 
     print(f"Scanned cases: {len(case_dirs)}")
     print(f"Completed production cases: {len(completed)}")
+    print(f"Cases with energy source: {len(candidates)}")
     print(f"Plotted cases: {len(traces)}")
     print(f"Output directory: {output_dir}")
     print(f"Summary: {summary}")
     if skipped:
-        print("Completed cases skipped because total_energy.xvg is missing:")
+        print("Cases skipped because total_energy.xvg is missing:")
         for name in skipped:
             print(f"  {name}")
         print("Rerun with --extract-missing to extract total_energy.xvg from md.edr.")
+        print("Use --extract-partial to also include unfinished cases with md.edr.")
 
 
 if __name__ == "__main__":

@@ -134,8 +134,24 @@ After cases complete, plot available production total-energy traces:
 python3 analysis/analyze_energy.py water_fixed_precision_campaign
 ```
 
+Individual plots show absolute total energy per atom. Combined plots subtract
+the fitted line intercept from each trace, so traces with different absolute
+energy offsets start from the same fitted origin.
+
 Use `--extract-missing` to extract `total_energy.xvg` from completed cases that
 only have `md.edr`.
+
+Use `--extract-partial` to also include unfinished cases that already have
+`md.edr`:
+
+```bash
+python3 analysis/analyze_energy.py water_fixed_precision_campaign --extract-partial
+```
+
+`--extract-missing` only operates on runs whose `md.log` says `Finished mdrun`.
+`--extract-partial` also extracts from running or interrupted production runs
+when `md.edr` exists, so the plot covers the available production time instead
+of waiting for the final `md.gro`.
 
 ## SLURM
 
@@ -223,4 +239,10 @@ For a partial run that has `md.trr` but not `md.gro`, use:
 ```bash
 vmd protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/topol.tpr \
     protein_water_fixed_precision_campaign/reference/protein_1ubq_N4/md.trr
+```
+
+Plot partial protein-water energy traces with:
+
+```bash
+python3 analysis/analyze_energy.py protein_water_fixed_precision_campaign --extract-partial
 ```
